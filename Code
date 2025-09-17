@@ -1,0 +1,158 @@
+// You need an Arduino, a red LED, an LCD, wires, a buzzer, and creativity.
+// In my project, the wire to be pulled out to “save the day” is connected to pin 4 and the ground rail on the breadboard.
+
+// Bomb Defuse Experiment
+
+#include <Wire.h>
+#include <DS1302.h>
+#include <LiquidCrystal.h>
+
+
+int rs = 7, en = 8, d4 = 9, d5 = 10, d6 = 11, d7 = 12;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+const int led_Red = 13;
+const int buzzer = 3;
+
+const int defuseWire = 4; // The magic is here: Bomb wire (INPUT_PULLUP): LOW = connected to GND; HIGH = removed
+
+const unsigned long INITIAL_COUNTDOWN_MS = 10000UL; 
+const unsigned long MESSAGE_DISPLAY_MS = 5000UL;    
+const unsigned long NEWGAME_DISPLAY_MS = 1000UL;    
+
+unsigned long startMillis = 0;         // countdown start time
+unsigned long previousFlashMillis = 0; // flash/beep timing
+unsigned long messageStartMillis = 0;  // when defuse/boom message started
+
+enum BombState {WAIT_RECONNECT, TICKING, DEFUSED, EXPLODED};
+BombState state = WAIT_RECONNECT;
+
+void setup() {
+  Serial.begin(9600);
+  lcd.begin(16, 2);
+
+  pinMode(led_Red, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  pinMode(defuseWire, INPUT_PULLUP); 
+
+  rtc.halt(false);
+  rtc.writeProtect(false);
+
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Connect wire!");
+}
+
+void startTicking() {
+  startMillis = millis();
+  previousFlashMillis = millis();
+  state = TICKING;
+  lcd.clear();
+}
+
+void enterDefused() {
+  state = DEFUSED;
+  messageStartMillis = millis();
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Bomb Defused!");
+  noTone(buzzer);
+  digitalWrite(led_Red, LOW);
+  Serial.println("DEFUSED");
+}
+
+void enterExploded() {
+  state = EXPLODED;
+  messageStartMillis = millis();
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("BOOM!!!");
+  tone(buzzer, 450, 1000); 
+  digitalWrite(led_Red, HIGH);
+  Serial.println("BOOM");
+}
+
+void loop() {
+  unsigned long now = millis();
+  bool wireConnected = (digitalRead(defuseWire) == LOW);
+
+  switch(state) {
+
+    case WAIT_RECONNECT:
+      
+      if (wireConnected) {
+       
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("New Game");
+        noTone(buzzer);
+        digitalWrite(led_Red, LOW);
+        delay(NEWGAME_DISPLAY_MS); 
+        startTicking();
+      }
+      break;
+
+    case TICKING: {
+   
+      if (!wireConnected) {
+        enterDefused();
+        break;
+      }
+
+      unsigned long elapsed = now - startMillis;
+      if (elapsed >= INITIAL_COUNTDOWN_MS) {
+        enterExploded();
+        break;
+      }
+
+      unsigned long remainingMs = INITIAL_COUNTDOWN_MS - elapsed;
+      int secondsLeft = remainingMs / 1000;
+
+      unsigned long interval;
+      if (secondsLeft > 5) {
+        interval = 1000; 
+      } else {
+        interval = 200 + (unsigned long)(secondsLeft * 160UL);
+      }
+
+      if (now - previousFlashMillis >= interval) {
+        previousFlashMillis = now;
+        digitalWrite(led_Red, HIGH);
+        delay(50);
+        digitalWrite(led_Red, LOW);
+        tone(buzzer, 450, 50);
+      }
+
+      lcd.setCursor(0,0);
+      lcd.print("Time left: ");
+      if (secondsLeft < 10) lcd.print('0');
+      lcd.print(secondsLeft);
+      lcd.print("s   ");
+      break;
+    }
+
+    case DEFUSED:
+     
+      if (now - messageStartMillis >= MESSAGE_DISPLAY_MS) {
+        state = WAIT_RECONNECT;
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("Awaiting reconnect");
+        Serial.println("DEFUSED -> awaiting reconnect");
+      }
+      break;
+
+    case EXPLODED:
+      
+      if (now - messageStartMillis >= MESSAGE_DISPLAY_MS) {
+        state = WAIT_RECONNECT;
+        lcd.clear();
+        lcd.setCursor(0,0);
+        lcd.print("Awaiting reconnect");
+        Serial.println("EXPLODED -> awaiting reconnect");
+      }
+      break;
+  } 
+}
+
+
