@@ -2,6 +2,7 @@
 // You need an Arduino, a red LED, an LCD, wires, a buzzer, and creativity.
 // In my project, the wire connected to pin 4 is the one that saves the day.
 // If you have free pins on your board, add some dummy wires and turn it into a game.
+// I used Unreal Engine to add the explosion effect, but you could also build a game that links the physical and digital.
 
 ![Arduino_Bomb](https://github.com/user-attachments/assets/ae49735f-0497-4f11-a5cf-5eb64b90744a)
 
